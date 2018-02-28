@@ -1,0 +1,87 @@
+#include "include.h"
+
+uint32 StartAddress = 0x0800f000;
+volatile FLASH_Status FLASHStatus = FLASH_COMPLETE;
+
+u32 Readflash(char i)
+{
+	uint32_t data;
+	uint32_t *p = (uint32_t*)(StartAddress+i);
+	data = *p;
+	return data;
+}
+
+void Writeflash(void)
+{
+	FLASH_Unlock();
+	FLASH_ClearFlag(FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPRTERR); 
+    FLASHStatus = FLASH_ErasePage(StartAddress);
+	if(FLASHStatus == FLASH_COMPLETE)
+	{
+		FLASHStatus = FLASH_ProgramWord(StartAddress, SerPD.Kp);
+		FLASHStatus = FLASH_ProgramWord(StartAddress+4, SerPD.Kd);
+		FLASHStatus = FLASH_ProgramWord(StartAddress+8, 0xE234567F);
+		FLASHStatus = FLASH_ProgramWord(StartAddress+12, MotorPara.SpeedSelectConut);
+	}
+	up_fmq();
+}
+
+void WriteflashOn(int writeOffsetAddress,u32 writeData)
+{
+	FLASH_Unlock();
+	FLASH_ClearFlag(FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPRTERR); 
+    FLASHStatus = FLASH_ErasePage(StartAddress);
+	if(FLASHStatus == FLASH_COMPLETE)
+	{
+		FLASHStatus = FLASH_ProgramWord(StartAddress+writeOffsetAddress, writeData);
+	}
+	up_fmq();
+}
+
+void Read(void)
+{
+    SerPD.Kp = (uint16)Readflash(0);
+	SerPD.Kd = (uint16)Readflash(4);
+	MotorPara.SpeedSelectConut = (byte)Readflash(8);
+	MotorPara.SpeedSelectConut = (byte)Readflash(12);
+	//up_fmq();
+}
+
+void PowerOnSpeedSelect(void)
+{
+	#ifdef SpeedSelectedEN
+	 	Read();
+	  switch(MotorPara.SpeedSelectConut)
+		{
+				case 0:
+					MiddleSpeed();
+				  FMQ_ON_onetime;	
+					FMQ_ON_onetime;
+					break;
+				case 1:	
+					LowSpeed();
+					FMQ_ON_onetime;
+					break;
+				case 2:
+					HighSpeed();
+				  FMQ_ON_onetime;
+					FMQ_ON_onetime;
+					FMQ_ON_onetime;
+					break;
+			  default:MiddleSpeed();break;
+		}
+		if(++MotorPara.SpeedSelectConut > 2)
+			  MotorPara.SpeedSelectConut = 0;
+		Writeflash();
+		#else
+		MiddleSpeed();
+    kaiji_fmq();
+		#endif
+}
+
+
+void CaliPoseFlashWrite(void)
+{}
+	
+void CaliPoseFlashRead(void)
+{}	
